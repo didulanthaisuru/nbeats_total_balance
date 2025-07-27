@@ -33,6 +33,7 @@ from neuralforecast import NeuralForecast
 from neuralforecast.models import NBEATSx
 from neuralforecast.losses.pytorch import DistributionLoss
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from scipy import stats
 
 # Hyperparameter Optimization
 import optuna
@@ -56,7 +57,7 @@ print("="*80)
 # BLOCK 2: DATA LOADING AND INITIAL INSPECTION
 # =============================================================================
 
-def load_and_inspect_data(file_path="nbeatx_final_functions/featured_shihara.xlsx"):
+def load_and_inspect_data(file_path="/kaggle/input/shiharadataset/featured_shihara.xlsx"):
     """
     Load balance data and perform initial inspection.
     
@@ -495,20 +496,130 @@ def hyperparameter_optimization(train_data, val_data, feature_lists,
     best_rmse = float('inf')
     
     def create_future_features(df, horizon):
-        """Create future features for prediction"""
-        last_date = df['ds'].max()
-        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=horizon, freq='D')
-        
-        future_df = pd.DataFrame({'ds': future_dates})
-        future_df['dayofweek_sin'] = np.sin(2 * np.pi * future_df['ds'].dt.dayofweek / 7)
-        future_df['dayofweek_cos'] = np.cos(2 * np.pi * future_df['ds'].dt.dayofweek / 7)
-        future_df['unique_id'] = 'balance'
-        
-        # Handle any nulls
+        """Create future features for prediction using exact validation combinations"""
+        print(f"🔧 Creating future features for {horizon} periods...")
+        print(f"🔧 Input dataframe shape: {df.shape}")
+        print(f"🔧 Input columns: {list(df.columns)}")
+
+        # For validation, use the exact ds and unique_id combinations from val_data
+        # Assume horizon == len(val_data) and val_data is available in closure
+        # If not, fallback to previous method
+        try:
+            # Use val_data from closure
+            val_ids = val_data['unique_id'].values
+            val_dates = val_data['ds'].values
+            future_df = pd.DataFrame({'unique_id': val_ids, 'ds': val_dates})
+            print(f"🔧 Using validation unique_id/ds combinations: {future_df.shape}")
+        except Exception as e:
+            print(f"⚠️ Could not use val_data for future_df: {e}, falling back to previous method")
+            # Fallback: use previous manual method
+            unique_ids = df['unique_id'].unique()
+            last_dates = df.groupby('unique_id')['ds'].max()
+            future_dfs = []
+            for uid in unique_ids:
+                last_date = last_dates[uid]
+                future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=horizon, freq='D')
+                uid_future = pd.DataFrame({'unique_id': uid, 'ds': future_dates})
+                future_dfs.append(uid_future)
+            future_df = pd.concat(future_dfs, ignore_index=True)
+
+        # Add time-based features
+        future_df['dayofweek_sin'] = np.sin(2 * np.pi * pd.to_datetime(future_df['ds']).dt.dayofweek / 7)
+        future_df['dayofweek_cos'] = np.cos(2 * np.pi * pd.to_datetime(future_df['ds']).dt.dayofweek / 7)
+        print(f"🔧 Added time-based features")
+
+        # Add ALL other columns from training data (except 'y')
+        train_columns = set(df.columns) - {'y'}
+        future_columns = set(future_df.columns)
+        missing_columns = train_columns - future_columns
+
+        print(f"🔧 Training columns: {len(train_columns)} - {sorted(train_columns)}")
+        print(f"🔧 Future columns: {len(future_columns)} - {sorted(future_columns)}")
+        print(f"🔧 Missing columns: {len(missing_columns)} - {sorted(missing_columns)}")
+
+        # Add all missing columns with appropriate values
+        for col in missing_columns:
+            print(f"🔧 Processing missing column: {col}")
+            if col in df.columns:
+                last_values = df.groupby('unique_id')[col].last()
+                future_df[col] = future_df['unique_id'].map(last_values)
+                if future_df[col].isnull().any():
+                    if df[col].dtype in ['float64', 'int64']:
+                        default_val = df[col].median() if not df[col].isnull().all() else 0
+                        future_df[col] = future_df[col].fillna(default_val)
+                        print(f"🔧 Filled NaNs in {col} with median: {default_val}")
+                    else:
+                        mode_val = df[col].mode()
+                        default_val = mode_val[0] if len(mode_val) > 0 else 'unknown'
+                        future_df[col] = future_df[col].fillna(default_val)
+                        print(f"🔧 Filled NaNs in {col} with mode: {default_val}")
+            else:
+                default_val = 0 if pd.api.types.is_numeric_dtype(df.select_dtypes(include=[np.number]).columns) else 'unknown'
+                future_df[col] = default_val
+                print(f"🔧 Added new column {col} with default: {default_val}")
+
+        # Ensure proper column order matching training data
+        train_col_order = [col for col in df.columns if col != 'y']
+        missing_cols = set(train_col_order) - set(future_df.columns)
+        if missing_cols:
+            print(f"⚠️ Still missing columns: {missing_cols}")
+            for col in missing_cols:
+                future_df[col] = 0
+                print(f"🔧 Added missing column {col} with value 0")
+        try:
+            future_df = future_df[train_col_order]
+            print(f"🔧 Column reordering successful - order matches training data")
+        except KeyError as e:
+            print(f"⚠️ Column reordering failed: {e}")
+            available_cols = [col for col in train_col_order if col in future_df.columns]
+            future_df = future_df[available_cols]
+            print(f"🔧 Using available columns: {len(available_cols)}")
+
+        # Final data type consistency check
         for col in future_df.columns:
-            if future_df[col].isnull().any():
-                future_df[col] = future_df[col].fillna(0)
-        
+            if col in df.columns:
+                if df[col].dtype != future_df[col].dtype:
+                    try:
+                        future_df[col] = future_df[col].astype(df[col].dtype)
+                        print(f"🔧 Converted {col} to {df[col].dtype}")
+                    except:
+                        print(f"⚠️ Could not convert {col} to {df[col].dtype}")
+
+        # Handle any remaining nulls
+        null_cols = future_df.columns[future_df.isnull().any()].tolist()
+        if null_cols:
+            print(f"🔧 Handling nulls in columns: {null_cols}")
+            for col in null_cols:
+                null_count = future_df[col].isnull().sum()
+                if future_df[col].dtype in ['float64', 'int64']:
+                    future_df[col] = future_df[col].fillna(0)
+                else:
+                    future_df[col] = future_df[col].fillna('unknown')
+                print(f"🔧 Filled {null_count} nulls in {col}")
+
+        # Final validation and reporting
+        print(f"🔧 Final future dataframe: {future_df.shape}")
+        print(f"🔧 Final columns: {list(future_df.columns)}")
+        print(f"🔧 Training columns (no y): {[col for col in df.columns if col != 'y']}")
+
+        train_features = set(df.columns) - {'y'}
+        future_features = set(future_df.columns)
+        features_match = train_features == future_features
+        print(f"🔧 Features match perfectly: {features_match}")
+        if not features_match:
+            print(f"⚠️ Feature mismatch detected!")
+            print(f"   Missing in future: {train_features - future_features}")
+            print(f"   Extra in future: {future_features - train_features}")
+        else:
+            print(f"✅ Perfect feature alignment achieved!")
+
+        print(f"🔧 Final validation:")
+        print(f"   Shape: {future_df.shape}")
+        print(f"   Date range: {future_df['ds'].min()} to {future_df['ds'].max()}")
+        print(f"   Unique IDs: {sorted(future_df['unique_id'].unique())}")
+        print(f"   No nulls: {not future_df.isnull().any().any()}")
+        print(f"   Actual rows: {len(future_df)}")
+
         return future_df
     
     def objective(trial: Trial) -> float:
@@ -526,6 +637,9 @@ def hyperparameter_optimization(train_data, val_data, feature_lists,
             n_blocks = [trial.suggest_int(f'n_blocks_{i}', 2, 4) for i in range(3)]
             n_harmonics = trial.suggest_int('n_harmonics', 1, 3)
             n_polynomials = trial.suggest_int('n_polynomials', 1, 3)
+            
+            print(f"🔧 Trial {trial.number}: Testing parameters...")
+            print(f"   Input size: {input_size}, LR: {learning_rate:.2e}, Steps: {max_steps}")
             
             # Create model
             model = NBEATSx(
@@ -547,10 +661,39 @@ def hyperparameter_optimization(train_data, val_data, feature_lists,
             
             # Create and train forecaster
             forecaster = NeuralForecast(models=[model], freq='D')
+            print(f"🏋️ Training model for trial {trial.number}...")
             forecaster.fit(df=train_data)
             
             # Generate predictions on validation set
+            print(f"🔮 Creating future features for validation...")
             future_df = create_future_features(train_data, len(val_data))
+            
+            print(f"📊 Training data shape: {train_data.shape}")
+            print(f"📊 Future data shape: {future_df.shape}")
+            print(f"📊 Validation data shape: {val_data.shape}")
+            
+            # Additional validation before prediction
+            print(f"🔍 Pre-prediction validation:")
+            print(f"   Training unique_ids: {sorted(train_data['unique_id'].unique())}")
+            print(f"   Future unique_ids: {sorted(future_df['unique_id'].unique())}")
+            print(f"   Training date range: {train_data['ds'].min()} to {train_data['ds'].max()}")
+            print(f"   Future date range: {future_df['ds'].min()} to {future_df['ds'].max()}")
+            
+            # Check for any obvious issues
+            if future_df.shape[0] == 0:
+                raise ValueError("Future dataframe is empty!")
+            
+            if len(future_df['unique_id'].unique()) == 0:
+                raise ValueError("No unique_ids in future dataframe!")
+            
+            # Check for missing required columns
+            required_cols = set(train_data.columns) - {'y'}
+            future_cols = set(future_df.columns)
+            missing_cols = required_cols - future_cols
+            if missing_cols:
+                raise ValueError(f"Missing required columns in future dataframe: {missing_cols}")
+            
+            print(f"🔮 Generating predictions for trial {trial.number}...")
             forecast_df = forecaster.predict(futr_df=future_df)
             
             # Calculate RMSE
@@ -570,8 +713,25 @@ def hyperparameter_optimization(train_data, val_data, feature_lists,
             return rmse
             
         except Exception as e:
-            print(f"❌ Trial {trial.number} failed: {str(e)}")
+            trial_time = time.time() - trial_start
+            print(f"❌ Trial {trial.number} failed after {trial_time:.1f}s: {str(e)}")
+            
+            # Add more detailed error information
+            if "missing combinations" in str(e).lower():
+                print("🔍 Debugging future dataframe issue:")
+                try:
+                    print(f"   Train data unique_ids: {train_data['unique_id'].unique()}")
+                    print(f"   Train data date range: {train_data['ds'].min()} to {train_data['ds'].max()}")
+                    print(f"   Val data unique_ids: {val_data['unique_id'].unique()}")
+                    print(f"   Val data date range: {val_data['ds'].min()} to {val_data['ds'].max()}")
+                except:
+                    pass
+            
             return float('inf')
+            
+        except KeyboardInterrupt:
+            print("⏹️ Trial interrupted by user")
+            raise
     
     # Run optimization
     print(f"\n🚀 Starting optimization with {n_trials} trials...")
@@ -705,17 +865,116 @@ def evaluate_model_performance(forecaster, train_data, test_data, feature_lists,
     print("="*60)
     
     def create_test_features(train_data, test_data):
-        """Create features for test period"""
+        """Create features for test period using robust manual method"""
+        print(f"🔧 Creating test features...")
+        print(f"🔧 Train data shape: {train_data.shape}")
+        print(f"🔧 Test data shape: {test_data.shape}")
+        
+        # Start with the basic structure from test_data
         future_df = test_data[['ds', 'unique_id']].copy()
         
-        # Add time features
+        # Add time-based features to match future_features
         future_df['dayofweek_sin'] = np.sin(2 * np.pi * future_df['ds'].dt.dayofweek / 7)
         future_df['dayofweek_cos'] = np.cos(2 * np.pi * future_df['ds'].dt.dayofweek / 7)
+        print(f"🔧 Added time-based features")
+        
+        # Add ALL other columns from training data (except 'y')
+        train_columns = set(train_data.columns) - {'y'}
+        future_columns = set(future_df.columns)
+        missing_columns = train_columns - future_columns
+        
+        print(f"🔧 Training columns: {len(train_columns)} - {sorted(train_columns)}")
+        print(f"🔧 Test future columns: {len(future_columns)} - {sorted(future_columns)}")
+        print(f"🔧 Missing columns: {len(missing_columns)} - {sorted(missing_columns)}")
+        
+        # Add missing columns with values from test_data if available, otherwise use train_data last values
+        for col in missing_columns:
+            print(f"🔧 Processing missing column: {col}")
+            
+            if col in test_data.columns:
+                # Use actual values from test_data
+                future_df[col] = test_data[col].values
+                print(f"🔧 Added {col} from test_data")
+            else:
+                # If not available in test_data, use last known values from train_data
+                if col in train_data.columns:
+                    last_values = train_data.groupby('unique_id')[col].last()
+                    future_df[col] = future_df['unique_id'].map(last_values)
+                    
+                    # Fill any remaining NaNs
+                    if future_df[col].isnull().any():
+                        if train_data[col].dtype in ['float64', 'int64']:
+                            default_val = train_data[col].median() if not train_data[col].isnull().all() else 0
+                            future_df[col] = future_df[col].fillna(default_val)
+                            print(f"🔧 Filled NaNs in {col} with median: {default_val}")
+                        else:
+                            mode_val = train_data[col].mode()
+                            default_val = mode_val[0] if len(mode_val) > 0 else 'unknown'
+                            future_df[col] = future_df[col].fillna(default_val)
+                            print(f"🔧 Filled NaNs in {col} with mode: {default_val}")
+                else:
+                    # Column doesn't exist anywhere, use default
+                    future_df[col] = 0
+                    print(f"🔧 Added new column {col} with default: 0")
+        
+        # Ensure proper column order matching training data
+        train_col_order = [col for col in train_data.columns if col != 'y']
+        
+        # Verify all required columns exist
+        missing_cols = set(train_col_order) - set(future_df.columns)
+        if missing_cols:
+            print(f"⚠️ Still missing columns: {missing_cols}")
+            for col in missing_cols:
+                future_df[col] = 0
+                print(f"🔧 Added missing column {col} with value 0")
+        
+        # Reorder columns to match training data exactly
+        try:
+            future_df = future_df[train_col_order]
+            print(f"🔧 Column reordering successful")
+        except KeyError as e:
+            print(f"⚠️ Column reordering failed: {e}")
+            # Use intersection of available columns
+            available_cols = [col for col in train_col_order if col in future_df.columns]
+            future_df = future_df[available_cols]
+            print(f"🔧 Using available columns: {len(available_cols)}")
+        
+        # Final data type consistency check
+        for col in future_df.columns:
+            if col in train_data.columns:
+                if train_data[col].dtype != future_df[col].dtype:
+                    try:
+                        future_df[col] = future_df[col].astype(train_data[col].dtype)
+                        print(f"🔧 Converted {col} to {train_data[col].dtype}")
+                    except:
+                        print(f"⚠️ Could not convert {col} to {train_data[col].dtype}")
         
         # Handle nulls
-        for col in future_df.columns:
-            if future_df[col].isnull().any():
-                future_df[col] = future_df[col].fillna(0)
+        null_cols = future_df.columns[future_df.isnull().any()].tolist()
+        if null_cols:
+            print(f"🔧 Handling nulls in columns: {null_cols}")
+            for col in null_cols:
+                null_count = future_df[col].isnull().sum()
+                if future_df[col].dtype in ['float64', 'int64']:
+                    future_df[col] = future_df[col].fillna(0)
+                else:
+                    future_df[col] = future_df[col].fillna('unknown')
+                print(f"🔧 Filled {null_count} nulls in {col}")
+        
+        # Final validation
+        print(f"🔧 Test future dataframe: {future_df.shape} with columns: {list(future_df.columns)}")
+        print(f"🔧 Training data columns: {list(train_data.columns)}")
+        
+        # Check feature alignment
+        train_features = set(train_data.columns) - {'y'}
+        future_features = set(future_df.columns)
+        features_match = train_features == future_features
+        print(f"🔧 Test features match perfectly: {features_match}")
+        
+        if not features_match:
+            print(f"⚠️ Test feature mismatch!")
+            print(f"   Missing: {train_features - future_features}")
+            print(f"   Extra: {future_features - train_features}")
         
         return future_df
     
@@ -889,7 +1148,6 @@ R²: {metrics['r2_score']:.6f}"""
     ax2.grid(True, alpha=0.3)
     
     # Q-Q plot
-    from scipy import stats
     stats.probplot(residuals, dist="norm", plot=ax3)
     ax3.set_title('Q-Q Plot (Normal Distribution)')
     ax3.grid(True, alpha=0.3)
@@ -1014,7 +1272,7 @@ R²: {metrics['r2_score']:.6f}"""
 # BLOCK 8: MAIN EXECUTION PIPELINE
 # =============================================================================
 
-def main_pipeline(data_file="nbeatx_final_functions/featured_shihara.xlsx", 
+def main_pipeline(data_file="/kaggle/input/shiharadataset/featured_shihara.xlsx", 
                  n_trials=20, 
                  test_days=30, 
                  horizon=30):
@@ -1128,7 +1386,7 @@ if __name__ == "__main__":
     
     # Configuration
     CONFIG = {
-        'data_file': "nbeatx_final_functions/featured_shihara.xlsx",
+        'data_file': "/kaggle/input/shiharadataset/featured_shihara.xlsx",
         'n_trials': 15,  # Adjust based on time constraints
         'test_days': 30,
         'horizon': 30
