@@ -1,0 +1,31 @@
+{
+  "study_name": "nbeats_balance_forecasting",
+  "total_trials": 19,
+  "completed_trials": 19,
+  "best_rmse": 0.08997911132734546,
+  "best_params": {
+    "input_size": 198,
+    "learning_rate": 0.004440702529686719,
+    "max_steps": 1121,
+    "batch_size": 56,
+    "n_harmonics": 1,
+    "n_polynomials": 2,
+    "dropout_prob_theta": 0.04106733287553536,
+    "n_blocks": [
+      5,
+      2,
+      2
+    ]
+  },
+  "optimization_duration": "11:15:25.228024",
+  "rmse_statistics": {
+    "count": 19.0,
+    "mean": 1689098082.0044284,
+    "std": 7361545839.09129,
+    "min": 0.08997911132734546,
+    "25%": 0.21259833749253304,
+    "50%": 0.2732333106465697,
+    "75%": 12382.298433572609,
+    "max": 32088477883.2567
+  }
+}

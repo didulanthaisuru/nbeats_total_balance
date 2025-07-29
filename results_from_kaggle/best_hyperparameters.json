@@ -1,0 +1,14 @@
+{
+  "input_size": 198,
+  "learning_rate": 0.004440702529686719,
+  "max_steps": 1121,
+  "batch_size": 56,
+  "n_harmonics": 1,
+  "n_polynomials": 2,
+  "dropout_prob_theta": 0.04106733287553536,
+  "n_blocks": [
+    5,
+    2,
+    2
+  ]
+}
