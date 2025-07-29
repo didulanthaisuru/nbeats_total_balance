@@ -1,0 +1,16 @@
+{
+    "Analysis_Date": "2025-07-29 13:51:23",
+    "Number_of_Data_Points": 28,
+    "Date_Range_Start": "2024-12-06",
+    "Date_Range_End": "2025-01-02",
+    "Mean_Absolute_Error": 62813.78,
+    "Root_Mean_Square_Error": 77804.77,
+    "Mean_Absolute_Percentage_Error": 2358.07,
+    "Mean_Forecast_Bias": 60414.26,
+    "Correlation_Coefficient": -0.7157,
+    "Directional_Accuracy_Percent": 48.1,
+    "Actual_Balance_Mean": 47584.56,
+    "Actual_Balance_Std": 32120.38,
+    "Forecast_Balance_Mean": 107998.82,
+    "Forecast_Balance_Std": 21614.8
+}
