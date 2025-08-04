@@ -593,31 +593,49 @@ def objective(trial):
                             
                             # Try different approaches to calculate loss
                             try:
-                                # Approach 1: Try with reshaped tensors
+                                # Approach 1: Try to extract loss from model's training history
+                                if hasattr(trained_model, 'trainer') and hasattr(trained_model.trainer, 'callback_metrics'):
+                                    # Look for any available loss metrics
+                                    metrics = trained_model.trainer.callback_metrics
+                                    for key in ['train_loss', 'loss', 'val_loss']:
+                                        if key in metrics:
+                                            loss_value = metrics[key]
+                                            if hasattr(loss_value, 'cpu'):
+                                                loss_value = float(loss_value.cpu().numpy())
+                                            else:
+                                                loss_value = float(loss_value)
+                                            print(f"📊 Extracted {key} for trial {trial.number}: {loss_value:.6f}")
+                                            cleanup_gpu_memory()
+                                            return loss_value
+                                
+                                # Approach 2: Try to calculate DistributionLoss properly
+                                # DistributionLoss expects distribution parameters, not point predictions
+                                # We need to create a simple distribution around our predictions
                                 y_true_reshaped = y_true_tensor.unsqueeze(-1)
                                 y_pred_reshaped = y_pred_tensor.unsqueeze(-1)
-                                loss_value = loss_fn(y_pred_reshaped, y_true_reshaped)
+                                
+                                # Create distribution parameters (mean and std)
+                                # For simplicity, use prediction as mean and small std
+                                mean_pred = y_pred_reshaped
+                                std_pred = torch.ones_like(y_pred_reshaped) * 0.1  # Small standard deviation
+                                
+                                # Combine mean and std into distribution parameters
+                                dist_params = torch.cat([mean_pred, std_pred], dim=-1)
+                                
+                                loss_value = loss_fn(dist_params, y_true_reshaped)
                                 loss_value = float(loss_value.detach().cpu().numpy())
-                                print(f"📊 Actual loss function value for trial {trial.number}: {loss_value:.6f}")
+                                print(f"📊 DistributionLoss calculated for trial {trial.number}: {loss_value:.6f}")
                                 cleanup_gpu_memory()
                                 return loss_value
+                                
                             except Exception as loss_calc_error1:
-                                print(f"⚠️ Loss function calculation failed (reshaped): {loss_calc_error1}")
-                                try:
-                                    # Approach 2: Try with original tensors
-                                    loss_value = loss_fn(y_pred_tensor, y_true_tensor)
-                                    loss_value = float(loss_value.detach().cpu().numpy())
-                                    print(f"📊 Actual loss function value for trial {trial.number}: {loss_value:.6f}")
-                                    cleanup_gpu_memory()
-                                    return loss_value
-                                except Exception as loss_calc_error2:
-                                    print(f"⚠️ Loss function calculation failed (original): {loss_calc_error2}")
-                                    # Fall back to simple MSE calculation
-                                    mse_loss = torch.mean((y_pred_tensor - y_true_tensor) ** 2)
-                                    mse_loss = float(mse_loss.detach().cpu().numpy())
-                                    print(f"📊 MSE loss fallback for trial {trial.number}: {mse_loss:.6f}")
-                                    cleanup_gpu_memory()
-                                    return mse_loss
+                                print(f"⚠️ DistributionLoss calculation failed: {loss_calc_error1}")
+                                # Fall back to simple MSE calculation
+                                mse_loss = torch.mean((y_pred_tensor - y_true_tensor) ** 2)
+                                mse_loss = float(mse_loss.detach().cpu().numpy())
+                                print(f"📊 MSE loss fallback for trial {trial.number}: {mse_loss:.6f}")
+                                cleanup_gpu_memory()
+                                return mse_loss
                         else:
                             print(f"⚠️ No valid predictions for loss calculation in trial {trial.number}")
                     
@@ -697,31 +715,47 @@ def objective(trial):
                                     
                                     # Try different approaches to calculate loss
                                     try:
-                                        # Approach 1: Try with reshaped tensors
+                                        # Approach 1: Try to extract loss from model's training history
+                                        if hasattr(trained_gpu_model, 'trainer') and hasattr(trained_gpu_model.trainer, 'callback_metrics'):
+                                            # Look for any available loss metrics
+                                            metrics = trained_gpu_model.trainer.callback_metrics
+                                            for key in ['train_loss', 'loss', 'val_loss']:
+                                                if key in metrics:
+                                                    loss_value = metrics[key]
+                                                    if hasattr(loss_value, 'cpu'):
+                                                        loss_value = float(loss_value.cpu().numpy())
+                                                    else:
+                                                        loss_value = float(loss_value)
+                                                    print(f"📊 GPU Extracted {key} for trial {trial.number}: {loss_value:.6f}")
+                                                    cleanup_gpu_memory()
+                                                    return loss_value
+                                        
+                                        # Approach 2: Try to calculate DistributionLoss properly
+                                        # DistributionLoss expects distribution parameters, not point predictions
                                         y_true_reshaped = y_true_tensor.unsqueeze(-1)
                                         y_pred_reshaped = y_pred_tensor.unsqueeze(-1)
-                                        loss_value = loss_fn(y_pred_reshaped, y_true_reshaped)
+                                        
+                                        # Create distribution parameters (mean and std)
+                                        mean_pred = y_pred_reshaped
+                                        std_pred = torch.ones_like(y_pred_reshaped) * 0.1  # Small standard deviation
+                                        
+                                        # Combine mean and std into distribution parameters
+                                        dist_params = torch.cat([mean_pred, std_pred], dim=-1)
+                                        
+                                        loss_value = loss_fn(dist_params, y_true_reshaped)
                                         loss_value = float(loss_value.detach().cpu().numpy())
-                                        print(f"📊 GPU Actual loss function value for trial {trial.number}: {loss_value:.6f}")
+                                        print(f"📊 GPU DistributionLoss calculated for trial {trial.number}: {loss_value:.6f}")
                                         cleanup_gpu_memory()
                                         return loss_value
+                                        
                                     except Exception as gpu_loss_calc_error1:
-                                        print(f"⚠️ GPU Loss function calculation failed (reshaped): {gpu_loss_calc_error1}")
-                                        try:
-                                            # Approach 2: Try with original tensors
-                                            loss_value = loss_fn(y_pred_tensor, y_true_tensor)
-                                            loss_value = float(loss_value.detach().cpu().numpy())
-                                            print(f"📊 GPU Actual loss function value for trial {trial.number}: {loss_value:.6f}")
-                                            cleanup_gpu_memory()
-                                            return loss_value
-                                        except Exception as gpu_loss_calc_error2:
-                                            print(f"⚠️ GPU Loss function calculation failed (original): {gpu_loss_calc_error2}")
-                                            # Fall back to simple MSE calculation
-                                            mse_loss = torch.mean((y_pred_tensor - y_true_tensor) ** 2)
-                                            mse_loss = float(mse_loss.detach().cpu().numpy())
-                                            print(f"📊 GPU MSE loss fallback for trial {trial.number}: {mse_loss:.6f}")
-                                            cleanup_gpu_memory()
-                                            return mse_loss
+                                        print(f"⚠️ GPU DistributionLoss calculation failed: {gpu_loss_calc_error1}")
+                                        # Fall back to simple MSE calculation
+                                        mse_loss = torch.mean((y_pred_tensor - y_true_tensor) ** 2)
+                                        mse_loss = float(mse_loss.detach().cpu().numpy())
+                                        print(f"📊 GPU MSE loss fallback for trial {trial.number}: {mse_loss:.6f}")
+                                        cleanup_gpu_memory()
+                                        return mse_loss
                                 else:
                                     print(f"⚠️ No valid predictions for GPU loss calculation in trial {trial.number}")
                             
