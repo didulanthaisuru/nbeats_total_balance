@@ -591,13 +591,33 @@ def objective(trial):
                             y_true_tensor = torch.tensor(actual[mask], dtype=torch.float32)
                             y_pred_tensor = torch.tensor(predicted[mask], dtype=torch.float32)
                             
-                            # Calculate the actual loss function value
-                            loss_value = loss_fn(y_pred_tensor, y_true_tensor)
-                            loss_value = float(loss_value.detach().cpu().numpy())
-                            
-                            print(f"📊 Actual loss function value for trial {trial.number}: {loss_value:.6f}")
-                            cleanup_gpu_memory()
-                            return loss_value
+                            # Try different approaches to calculate loss
+                            try:
+                                # Approach 1: Try with reshaped tensors
+                                y_true_reshaped = y_true_tensor.unsqueeze(-1)
+                                y_pred_reshaped = y_pred_tensor.unsqueeze(-1)
+                                loss_value = loss_fn(y_pred_reshaped, y_true_reshaped)
+                                loss_value = float(loss_value.detach().cpu().numpy())
+                                print(f"📊 Actual loss function value for trial {trial.number}: {loss_value:.6f}")
+                                cleanup_gpu_memory()
+                                return loss_value
+                            except Exception as loss_calc_error1:
+                                print(f"⚠️ Loss function calculation failed (reshaped): {loss_calc_error1}")
+                                try:
+                                    # Approach 2: Try with original tensors
+                                    loss_value = loss_fn(y_pred_tensor, y_true_tensor)
+                                    loss_value = float(loss_value.detach().cpu().numpy())
+                                    print(f"📊 Actual loss function value for trial {trial.number}: {loss_value:.6f}")
+                                    cleanup_gpu_memory()
+                                    return loss_value
+                                except Exception as loss_calc_error2:
+                                    print(f"⚠️ Loss function calculation failed (original): {loss_calc_error2}")
+                                    # Fall back to simple MSE calculation
+                                    mse_loss = torch.mean((y_pred_tensor - y_true_tensor) ** 2)
+                                    mse_loss = float(mse_loss.detach().cpu().numpy())
+                                    print(f"📊 MSE loss fallback for trial {trial.number}: {mse_loss:.6f}")
+                                    cleanup_gpu_memory()
+                                    return mse_loss
                         else:
                             print(f"⚠️ No valid predictions for loss calculation in trial {trial.number}")
                     
@@ -675,13 +695,33 @@ def objective(trial):
                                     y_true_tensor = torch.tensor(actual[mask], dtype=torch.float32)
                                     y_pred_tensor = torch.tensor(predicted[mask], dtype=torch.float32)
                                     
-                                    # Calculate the actual loss function value
-                                    loss_value = loss_fn(y_pred_tensor, y_true_tensor)
-                                    loss_value = float(loss_value.detach().cpu().numpy())
-                                    
-                                    print(f"📊 GPU Actual loss function value for trial {trial.number}: {loss_value:.6f}")
-                                    cleanup_gpu_memory()
-                                    return loss_value
+                                    # Try different approaches to calculate loss
+                                    try:
+                                        # Approach 1: Try with reshaped tensors
+                                        y_true_reshaped = y_true_tensor.unsqueeze(-1)
+                                        y_pred_reshaped = y_pred_tensor.unsqueeze(-1)
+                                        loss_value = loss_fn(y_pred_reshaped, y_true_reshaped)
+                                        loss_value = float(loss_value.detach().cpu().numpy())
+                                        print(f"📊 GPU Actual loss function value for trial {trial.number}: {loss_value:.6f}")
+                                        cleanup_gpu_memory()
+                                        return loss_value
+                                    except Exception as gpu_loss_calc_error1:
+                                        print(f"⚠️ GPU Loss function calculation failed (reshaped): {gpu_loss_calc_error1}")
+                                        try:
+                                            # Approach 2: Try with original tensors
+                                            loss_value = loss_fn(y_pred_tensor, y_true_tensor)
+                                            loss_value = float(loss_value.detach().cpu().numpy())
+                                            print(f"📊 GPU Actual loss function value for trial {trial.number}: {loss_value:.6f}")
+                                            cleanup_gpu_memory()
+                                            return loss_value
+                                        except Exception as gpu_loss_calc_error2:
+                                            print(f"⚠️ GPU Loss function calculation failed (original): {gpu_loss_calc_error2}")
+                                            # Fall back to simple MSE calculation
+                                            mse_loss = torch.mean((y_pred_tensor - y_true_tensor) ** 2)
+                                            mse_loss = float(mse_loss.detach().cpu().numpy())
+                                            print(f"📊 GPU MSE loss fallback for trial {trial.number}: {mse_loss:.6f}")
+                                            cleanup_gpu_memory()
+                                            return mse_loss
                                 else:
                                     print(f"⚠️ No valid predictions for GPU loss calculation in trial {trial.number}")
                             
