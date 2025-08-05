@@ -1,0 +1,21 @@
+BALANCE PREDICTION ANALYSIS RESULTS
+========================================
+
+Dataset Information:
+- Total records: 30
+- Date range: 2024-12-04 00:00:00 to 2025-01-02 00:00:00
+- Actual balance range: 1373.04 to 100898.04
+- Predicted balance range: 1982.79 to 321310.67
+
+ERROR METRICS:
+- Mean Square Error (MSE): 3776114543.1981
+- Root Mean Square Error (RMSE): 61450.0980
+- Symmetric Mean Absolute Percentage Error (SMAPE): 67.36%
+- Mean Absolute Error (MAE): 32555.1640
+- Mean Absolute Percentage Error (MAPE): 230.34%
+- Correlation: 0.4571
+- R-squared: -2.4161
+
+INTERPRETATION:
+- RMSE is high compared to data variability (needs improvement)
+- SMAPE indicates poor prediction accuracy

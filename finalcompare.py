@@ -53,19 +53,35 @@ def load_and_plot_gpu_comparison():
         test_col = None
         pred_col = None
         
+        # Specifically look for date_over_balance_test column
+        for col in df.columns:
+            if 'date_over_balance_test' in col.lower():
+                test_col = col
+                break
+        
+        # If date_over_balance_test not found, look for other test columns
+        if test_col is None:
+            for col in df.columns:
+                col_lower = col.lower()
+                if 'test' in col_lower or 'actual' in col_lower:
+                    test_col = col
+                    break
+        
+        # Look for prediction columns
         for col in df.columns:
             col_lower = col.lower()
-            if 'test' in col_lower or 'actual' in col_lower:
-                test_col = col
-            elif 'pred' in col_lower or 'forecast' in col_lower:
+            if 'pred' in col_lower or 'forecast' in col_lower:
                 pred_col = col
+                break
         
         # If not found, try to identify by position or naming patterns
         if test_col is None or pred_col is None:
             numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
             if len(numeric_cols) >= 2:
-                test_col = numeric_cols[0]
-                pred_col = numeric_cols[1]
+                if test_col is None:
+                    test_col = numeric_cols[0]
+                if pred_col is None:
+                    pred_col = numeric_cols[1]
             else:
                 print("Could not identify test and prediction columns automatically")
                 print("Available columns:", list(df.columns))
@@ -88,7 +104,7 @@ def load_and_plot_gpu_comparison():
                 color='blue', linewidth=2, label='Prediction Balance', marker='s', markersize=4)
         
         # Customize the plot
-        plt.title('GPU Compare: Test vs Prediction Balance', fontsize=16, fontweight='bold')
+        plt.title('GPU Compare: Date Over Balance Test vs Prediction Balance', fontsize=16, fontweight='bold')
         plt.xlabel('Date', fontsize=12)
         plt.ylabel('Balance', fontsize=12)
         plt.legend(fontsize=11)
