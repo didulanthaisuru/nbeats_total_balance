@@ -1,0 +1,89 @@
+COMPREHENSIVE BALANCE PREDICTION ANALYSIS REPORT
+============================================================
+
+Analysis Date: 2025-08-09 14:23:16
+
+SUMMARY TABLE:
+--------------------------------------------------------------------------------
+Dataset              Points   MSE             RMSE            MAPE       SMAPE      R²      
+--------------------------------------------------------------------------------
+Current Model (First 29 Days) 29       994283715.23    31532.26        205.65    % 63.99     % 0.1190  
+Current Model (All 30 Days) 30       3776114543.20   61450.10        230.34    % 67.36     % -2.4161 
+37-Day Model Results 30       974529427.67    31217.45        33.53     % 33.21     % -0.5870 
+--------------------------------------------------------------------------------
+
+
+DETAILED ANALYSIS - CURRENT MODEL (FIRST 29 DAYS)
+==================================================
+Dataset Information:
+- Total records: 29
+- Date range: 2024-12-04 00:00:00 to 2025-01-01 00:00:00
+- Actual balance range: 1373.04 to 100898.04
+- Predicted balance range: 1982.79 to 141373.69
+
+Error Metrics:
+- Mean Square Error (MSE): 994,283,715.2349
+- Root Mean Square Error (RMSE): 31,532.2647
+- Mean Absolute Error (MAE): 23,657.0159
+- Mean Absolute Percentage Error (MAPE): 205.65%
+- Symmetric Mean Absolute Percentage Error (SMAPE): 63.99%
+- Correlation coefficient: 0.7702
+- R-squared: 0.1190
+
+Performance Assessment:
+- Poor prediction accuracy (SMAPE > 30%)
+- Moderate correlation between actual and predicted
+- Visualization saved as: balance_analysis_current_model_(first_29_days).png
+
+DETAILED ANALYSIS - CURRENT MODEL (ALL 30 DAYS)
+==================================================
+Dataset Information:
+- Total records: 30
+- Date range: 2024-12-04 00:00:00 to 2025-01-02 00:00:00
+- Actual balance range: 1373.04 to 100898.04
+- Predicted balance range: 1982.79 to 321310.67
+
+Error Metrics:
+- Mean Square Error (MSE): 3,776,114,543.1981
+- Root Mean Square Error (RMSE): 61,450.0980
+- Mean Absolute Error (MAE): 32,555.1640
+- Mean Absolute Percentage Error (MAPE): 230.34%
+- Symmetric Mean Absolute Percentage Error (SMAPE): 67.36%
+- Correlation coefficient: 0.4571
+- R-squared: -2.4161
+
+Performance Assessment:
+- Poor prediction accuracy (SMAPE > 30%)
+- Weak correlation between actual and predicted
+- Visualization saved as: balance_analysis_current_model_(all_30_days).png
+
+DETAILED ANALYSIS - 37-DAY MODEL RESULTS
+==================================================
+Dataset Information:
+- Total records: 30
+- Date range: 2024-11-21 00:00:00 to 2024-12-20 00:00:00
+- Actual balance range: 48763.04 to 113758.04
+- Predicted balance range: 46107.17 to 96442.52
+
+Error Metrics:
+- Mean Square Error (MSE): 974,529,427.6676
+- Root Mean Square Error (RMSE): 31,217.4539
+- Mean Absolute Error (MAE): 25,459.9327
+- Mean Absolute Percentage Error (MAPE): 33.53%
+- Symmetric Mean Absolute Percentage Error (SMAPE): 33.21%
+- Correlation coefficient: -0.1435
+- R-squared: -0.5870
+
+Performance Assessment:
+- Poor prediction accuracy (SMAPE > 30%)
+- Weak correlation between actual and predicted
+- Visualization saved as: balance_analysis_37-day_model_results.png
+
+
+RECOMMENDATIONS:
+--------------------
+1. Compare MSE and RMSE values to identify which model performs better
+2. Lower SMAPE values indicate better prediction accuracy
+3. Higher correlation and R-squared values suggest better model fit
+4. Review visualizations for patterns in prediction errors
+5. Consider model improvements if SMAPE > 20% or R-squared < 0.5
